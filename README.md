@@ -1,85 +1,108 @@
-# whatsapp bot
+# WhatsApp Bot (Bantu 🐒)
 
-this project implements a whatsapp bot using the baileys library. it handles authentication via qr code, maintains persistent sessions, and auto-replies to specific messages.
+This project implements an AI-powered WhatsApp assistant using the **Baileys** library and **Ollama** (local LLM). The bot, named "Bantu," features a distinct personality, maintains persistent conversation memory, and allows for real-time knowledge updates without restarting the server.
 
-### directory structure
+### Directory Structure
 
 ```text
 .
-├── auth_info/           # session credentials (generated automatically) (ignored by git)
-├── node_modules/        # dependencies (ignored by git)
-├── bot.js               # main bot logic
-├── package.json         # npm configuration
-├── package-lock.json    # dependency lock file
+├── auth_info/           # Session credentials (generated automatically) (ignored by git)
+├── node_modules/        # Dependencies (ignored by git)
+├── bot.js               # Main bot logic
+├── bantu_memory.json    # Stores user conversation history (generated automatically)
+├── bantu_knowledge.txt  # Real-time knowledge base for the AI (create manually)
+├── package.json         # NPM configuration
+├── package-lock.json    # Dependency lock file
 └── README.md
 ```
 
-note: the `auth_info/` folder is generated automatically when you run the code and scan the qr code. it contains sensitive session data and should not be committed to git.
+> **Note:** The `auth_info/` folder contains sensitive session data. The `bantu_memory.json` file contains chat history. Neither should be committed to public repositories.
 
-### how it works
+### Key Features
 
-the bot operates on a simple event-based architecture:
+1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent, witty, and context-aware responses in "Hinglish."
+2. **Persistent Memory:** Saves the last 30 messages per user to `bantu_memory.json`, allowing the bot to remember context even after a server restart.
+3. **Dynamic Knowledge:** Reads from `bantu_knowledge.txt` on every message. You can update this file to change the bot's status or knowledge in real-time without stopping the code.
+4. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
+5. **Command System:** Users can start/stop the AI session using commands to avoid spamming.
 
-1. **authentication:**
+### How it Works
 
-* uses `useMultiFileAuthState` to store session credentials in the `auth_info` directory.
-* on the first run, it generates a qr code in the terminal. scanning this with your whatsapp mobile app links the device.
+The bot operates on an event-based architecture:
 
-2. **connection handling:**
+1. **Authentication:**
+* Uses `useMultiFileAuthState` to store session credentials in `auth_info`.
+* Generates a QR code on the first run for linking your WhatsApp account.
 
-* auto-reconnects if the connection drops (e.g., internet issues).
-* stops trying to reconnect only if the user explicitly logs out from the mobile app.
 
-3. **message listener:**
+2. **AI Processing (Ollama):**
+* When a user activates the bot (via `/bantu`), messages are sent to a local Ollama instance.
+* The bot injects a "System Prompt" containing the current time, personality guidelines, and content from `bantu_knowledge.txt`.
 
-* listens for the `messages.upsert` event to detect new incoming messages.
-* checks the text content of the message. if a user sends **"hello"** (case-insensitive), the bot replies with: *"tune muze hello bolaa, ye le mera HII."*
 
-### key files and functions
+3. **Memory Management:**
+* Conversation history is loaded from `bantu_memory.json` on startup.
+* After every reply, the updated history is saved back to the file.
+* To manage token limits, only the last 30 messages are stored per user.
 
-**`bot.js`**
 
-* `startBot()`: main function that initializes the socket connection.
-* `saveCreds`: updates the `auth_info` folder whenever session keys change to keep the login alive.
-* `sock.ev.on('messages.upsert')`: the core logic that parses incoming messages and triggers replies.
 
-### how to run
+### Prerequisites
 
-1. **clone the repository**
-download the code to your local machine.
+* **Node.js** (v16 or higher)
+* **Ollama** installed and running locally.
+* **Llama 3 Model** (or your preferred model) pulled in Ollama.
 
+### How to Run
+
+1. **Clone the repository**
 ```bash
 git clone https://github.com/shreekar2005/WhatsAppBot.git
-```
-
-2. **navigate to directory**
-enter the project folder.
-
-```bash
 cd WhatsAppBot
 ```
 
-3. **install dependencies**
-install the required libraries (@whiskeysockets/baileys, qrcode-terminal) as defined in `package.json`.
 
+2. **Install dependencies**
 ```bash
 npm install
 ```
 
-4. **start the bot**
-run the bot script.
 
+3. **Setup Ollama**
+Make sure Ollama is running and you have the model downloaded.
+```bash
+ollama pull llama3.1
+# Keep Ollama running in a separate terminal or background service
+```
+
+
+4. **Create Knowledge File (Optional)**
+Create a file named `bantu_knowledge.txt` in the root folder to give the bot initial context.
+```text
+STATUS: Shreekar is currently coding.
+PROJECT: Working on the WhatsApp AI Bot.
+```
+
+
+5. **Start the bot**
 ```bash
 node bot.js
 ```
 
-5. **scan qr code**
 
-* the terminal will display a qr code.
-* open whatsapp on your phone -> three dots -> linked devices -> link a device.
-* scan the code.
+6. **Scan QR Code**
+* The terminal will display a QR code.
+* Open WhatsApp on your phone -> Three dots -> Linked devices -> Link a device.
+* Scan the code.
 
-6. **test the bot**
 
-* send "hello" to yourself
-* the bot should reply immediately to that.
+
+### Usage Commands
+
+Once the bot is running, users can interact with it using the following commands:
+
+* **`/bantu`** : Wake up the AI and start a conversation.
+* **`/q`** or **`/exit`** : End the session (the bot stops replying to that user).
+* **`/help`** : Show the menu of commands.
+
+If a user who hasn't started a session messages you, the bot will send a one-time automated reply informing them that you are busy and how to activate Bantu.

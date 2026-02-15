@@ -6,9 +6,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# session data
+# session data (sensitive login info)
 auth_info/
+
+# bot memory & knowledge (privacy & runtime data)
+bantu_memory.json
+bantu_knowledge.txt
 
 # system files
 .DS_Store
 Thumbs.db
+
+# environment variables (good practice to add now)
+.env
