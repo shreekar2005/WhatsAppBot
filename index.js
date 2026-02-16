@@ -261,7 +261,7 @@ async function startAgent() {
 `📊 *${CONFIG.agent_name} Health Report*
 
 👤 *State:* ${stateText}
-🧠 *Knowledge:* "${status || 'Empty'}"
+🧠 *Owner Status:* "${status || 'Empty'}"
 💬 *Active Chats:* ${chatHistory.size}
 ⏱️ *Uptime:* ${uptimeMin} mins`.trim();
 
