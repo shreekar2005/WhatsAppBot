@@ -26,7 +26,7 @@ This project implements a fully customizable AI-powered WhatsApp assistant using
 1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent and context-aware responses.
 2. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
 3. **Persistent Memory:** Saves the last 30 messages per user to `agent_memory.json`.
-4. **Owner Control Group:** A specific WhatsApp group ("Agent-Control") acts as a control room to wake/sleep the bot, update status, or add facts commands.
+4. **Owner Control Group:** A specific WhatsApp group ("Admin Control") acts as a control room to wake/sleep the bot, update status, or add facts commands.
 5. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
 6. **Smart Ignoring:** The bot can be told to ignore specific messages starting with `/ignore`, preventing it from processing text meant for others.
 
@@ -58,7 +58,7 @@ Create a file named `agent_config.json` in the root folder:
 {
   "owner_name": "Shreekar",
   "agent_name": "Bantu",
-  "owner_group_name": "Agent-Control",
+  "owner_group_name": "Admin Control",
   "forbidden_words": ["SecretKey"],
   "my_style": ["- Be funny", "- Speak Hinglish"],
   "security_rules": ["- No passwords"]
@@ -87,7 +87,7 @@ node index.js
 7. **Create Control Group**
 
 * Create a new WhatsApp group containing only yourself.
-* **Important:** Name the group exactly **`Agent-Control`** (or whatever you set in `agent_config.json`).
+* **Important:** Name the group exactly **`Admin Control`** (or whatever you set in `agent_config.json`).
 * This group acts as your "Command Center".
 * Type `/help` in this group to confirm the bot is listening.
 
@@ -102,7 +102,7 @@ node index.js
 * **`/ignore <text>`** : The bot will completely ignore any message starting with this tag. Useful if you want to send a note to yourself without triggering the bot.
 * **Note:** If you message the bot without using `/agent`, it will automatically reply with a help menu every single time.
 
-#### Owner Commands (In "Agent-Control" Group chat)
+#### Owner Commands (In "Admin Control" Group chat)
 
 * **`/wake`** & **`/sleep`** : Turn the bot ON or OFF globally.
 * **`/mystatus [msg]`** : Update the owner's current status (e.g., "Driving").

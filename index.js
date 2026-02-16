@@ -14,13 +14,14 @@ try {
     } else {
         console.warn("⚠️ Warning: Key file not found at .env/openrouter_key.json");
     }
+    OPENROUTER_API_KEY = "";
 } catch (err) {
     console.error("❌ Error reading API key:", err.message);
 }
 
-const USE_CLOUD_FIRST = true; // Set 'false' if you want to use Local Ollama first
-const CLOUD_MODEL = "google/gemini-2.0-flash-lite-preview-02-05:free"; // Primary Cloud Model (Fastest & Best for Chat)
-const LOCAL_MODEL = "llama3.1"; // Backup Local Model
+const USE_CLOUD_FIRST = true; // If you want to default to OLLAMA LLM then set it "false"
+const CLOUD_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"; 
+const LOCAL_MODEL = "llama3.1"; 
 
 
 // CONFIGURATION & SETTINGS
@@ -61,13 +62,13 @@ loadConfig();
 
 let chatHistory = loadMemory();
 let activeSessions = new Map();
-// greetedUsers is no longer needed since we reply every time now
 let OWNER_GROUP_ID = null; 
 let IS_AGENT_ACTIVE = false; // default: sleeping 💤
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function scrubSensitiveData(text) {
+    if (!text) return "";
     let cleanText = text;
     CONFIG.forbidden_words.forEach(secret => {
         const regex = new RegExp(secret, "gi"); 
@@ -147,10 +148,11 @@ async function askLLM(senderID, userText) {
     ];
 
     let cleanReply = "";
+    let capturedReasoning = null; 
 
     // --- HELPER: CALL OPENROUTER ---
     const callOpenRouter = async () => {
-        // console.log("☁️ Trying OpenRouter...");
+        console.log(`☁️  Using Cloud Model: ${CLOUD_MODEL}`);
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { 
@@ -162,6 +164,7 @@ async function askLLM(senderID, userText) {
             body: JSON.stringify({
                 model: CLOUD_MODEL,
                 messages: payloadMessages,
+                reasoning: { enabled: true }, 
                 stream: false,
                 temperature: 0.7,
                 max_tokens: 1000
@@ -174,12 +177,17 @@ async function askLLM(senderID, userText) {
         }
         
         const data = await response.json();
-        return data.choices?.[0]?.message?.content;
+        const msg = data.choices?.[0]?.message;
+        
+        return { 
+            content: msg?.content, 
+            reasoning_details: msg?.reasoning_details 
+        };
     };
 
     // --- HELPER: CALL LOCAL OLLAMA ---
     const callOllama = async () => {
-        // console.log("🦙 Trying Local Ollama...");
+        console.log(`🦙 Using Local Model: ${LOCAL_MODEL}`);
         const response = await fetch('http://127.0.0.1:11434/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -194,26 +202,33 @@ async function askLLM(senderID, userText) {
         if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
         
         const data = await response.json();
-        return data.message?.content;
+        return { content: data.message?.content };
     };
 
     // 2. EXECUTE WITH FALLBACK LOGIC
     try {
+        let result = null;
         if (USE_CLOUD_FIRST) {
             try {
-                cleanReply = await callOpenRouter();
+                result = await callOpenRouter();
             } catch (cloudErr) {
                 console.error("⚠️ Cloud failed, switching to Local:", cloudErr.message);
-                cleanReply = await callOllama();
+                result = await callOllama();
             }
         } else {
             try {
-                cleanReply = await callOllama();
+                result = await callOllama();
             } catch (localErr) {
                 console.error("⚠️ Local failed, switching to Cloud:", localErr.message);
-                cleanReply = await callOpenRouter();
+                result = await callOpenRouter();
             }
         }
+        
+        if (result) {
+            cleanReply = result.content;
+            capturedReasoning = result.reasoning_details;
+        }
+
     } catch (finalError) {
         console.error("❌ All AI providers failed:", finalError);
         return "I'm having trouble connecting to my brain right now.";
@@ -225,8 +240,17 @@ async function askLLM(senderID, userText) {
     // Scrub secrets (like passwords/names) from the reply
     cleanReply = scrubSensitiveData(cleanReply);
 
-    // Save to memory
-    userContext.push({ role: 'assistant', content: cleanReply });
+    
+    const assistantMsg = { 
+        role: 'assistant', 
+        content: cleanReply,
+    };
+    
+    if (capturedReasoning) {
+        assistantMsg.reasoning_details = capturedReasoning;
+    }
+
+    userContext.push(assistantMsg);
     chatHistory.set(senderID, userContext);
     saveMemory(chatHistory);
 
@@ -336,6 +360,7 @@ async function startAgent() {
                     // Logic: Calculate uptime and determine the status emoji/text
                     const uptimeMin = (process.uptime() / 60).toFixed(1);
                     const stateText = IS_AGENT_ACTIVE ? "✅ AWAKE & ACTIVE" : "💤 SLEEPING (SILENT)";
+                    const activeModel = USE_CLOUD_FIRST ? CLOUD_MODEL : LOCAL_MODEL;
 
                     // Clean, readable template for the WhatsApp message
                     const report = 
@@ -343,6 +368,7 @@ async function startAgent() {
 
 👤 *State:* ${stateText}
 🧠 *Owner Status:* "${status || 'Empty'}"
+🤖 *Model:* ${activeModel}
 💬 *Active Chats:* ${chatHistory.size}
 ⏱️ *Uptime:* ${uptimeMin} mins`.trim();
 
@@ -460,6 +486,11 @@ async function startAgent() {
             // User is in a session - talk to AI
             await sock.sendPresenceUpdate('composing', sender);
             const aiReply = await askLLM(sender, text);
+            
+            // --- NEW: LOG THE REPLY TO CONSOLE ---
+            console.log(`🤖 ${CONFIG.agent_name} replied: ${aiReply}`);
+            // -------------------------------------
+
             await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : ` + aiReply });
             await sock.sendPresenceUpdate('paused', sender);
         } else {
