@@ -193,7 +193,7 @@ async function startAgent() {
         // GUARD BLOCK
         if (text.startsWith(`${CONFIG.agent_name} :`)) return;
         if (text.startsWith(`*${CONFIG.owner_name} is Busy!*`)) return;
-        if (text.startsWith(`Commands for ${CONFIG.agent_name}`)) return;
+        if (text.startsWith(`Commands for Agent ${CONFIG.agent_name}`)) return;
         
         
         // OWNER GROUP CONTROL (THE ONLY PLACE FOR ADMIN COMMANDS)
@@ -214,17 +214,17 @@ async function startAgent() {
                 const cmd = text.trim();
                 const cmdLower = cmd.toLowerCase();
                 
-                if (cmdLower === "/help" || cmdLower === "help") {
+                if (cmdLower === "/help") {
                     const adminMenu = 
 `*${CONFIG.agent_name} Control Center*
-*/wake* : Activate Agent
-*/sleep* : Deactivate Agent
-*/mystatus* : Check Owner Status
-*/mystatus [msg]* : Update Owner Status
-*/status* : Check Agent Status
-*/myinfo* : View Facts about Owner
-*/myinfo [msg]* : Add Fact about Owner
-*/clear* : Wipe All chats Memory (RESET AGENT)`;
+- */wake* : Activate Agent
+- */sleep* : Deactivate Agent
+- */mystatus* : Check Owner Status
+- */mystatus [msg]* : Update Owner Status
+- */status* : Check Agent Status
+- */myinfo* : View Facts about Owner
+- */myinfo [msg]* : Add Fact about Owner
+- */clear* : Wipe All chats Memory (RESET AGENT)`;
                     await sock.sendMessage(sender, { text: adminMenu });
                 }
                 else if (cmd.startsWith("/mystatus")) {
@@ -302,7 +302,6 @@ async function startAgent() {
 
         if (cmd === '/agent') {
             if (!IS_AGENT_ACTIVE) {
-                // If the agent is globally sleeping (Admin command /sleep), we warn them.
                 await sock.sendMessage(sender, { text: `💤 ${CONFIG.agent_name} is currently sleeping. Please contact ${CONFIG.owner_name} directly.` });
                 return;
             }
@@ -311,32 +310,35 @@ async function startAgent() {
             return;
         }
 
-        // STOP HERE IF SLEEPING (Admin Global Sleep)
-        if (!IS_AGENT_ACTIVE) return;
-
-        if (cmd === '/q' || cmd === '/exit') {
-            activeSessions.delete(sender);
-            await sock.sendMessage(sender, { text: "Bye! 👋" });
-            return;
-        }
-
         if (cmd === '/clear') {
             chatHistory.delete(sender);
             activeSessions.delete(sender);
             saveMemory(chatHistory);
-            await sock.sendMessage(sender, { text: `🧹 Chat memory cleared.` });
+            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : 🧹 Chat memory cleared` });
+            if (!IS_AGENT_ACTIVE) {
+                await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Going to sleep again 💤` });
+            }
             return;
         }
 
-        if (cmd === '/help' || cmd === 'help') {
+        // STOP HERE IF SLEEPING (Admin Global Sleep)
+        if (!IS_AGENT_ACTIVE) return;
+
+        if ((cmd === '/q' || cmd === '/exit') && activeSessions.has(sender)) {
+            activeSessions.delete(sender);
+            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Bye bayeee! 👋` });
+            return;
+        }
+
+        if (cmd === '/help') {
             const helpMsg = 
 `Commands for Agent ${CONFIG.agent_name}
 
-*/ignore <text>* : Agent will fully ignore text after '/ignore'
-*/agent* : Start chat with agent
-*/clear* : Clear your chat memory for agent
-*/q* : Stop chat with agent
-*/help* : Show this menu
+- */ignore <text>* : Agent will fully ignore text after '/ignore'
+- */agent* : Start chat with agent
+- */clear* : Clear your chat memory for agent
+- */q* : Stop chat with agent
+- */help* : Show this menu
 
 *WARNING* : Currently I am in development stage, so please be kind :)`;
             await sock.sendMessage(sender, { text: helpMsg });
@@ -344,23 +346,22 @@ async function startAgent() {
         }
 
         if (activeSessions.has(sender)) {
-            // User IS in a session - talk to AI
+            // User is in a session - talk to AI
             await sock.sendPresenceUpdate('composing', sender);
             const aiReply = await askOllama(sender, text);
             await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : ` + aiReply });
             await sock.sendPresenceUpdate('paused', sender);
         } else {
-            
             const autoMessage = 
 `*${CONFIG.owner_name} is Busy!*
 
 I am his assistant "${CONFIG.agent_name}"
 
-*/ignore <text>* : Agent will fully ignore text after '/ignore'
-*/agent* : Start chat with agent
-*/clear* : Clear your chat memory for agent
-*/q* : Stop chat with agent
-*/help* : Show this menu
+- */ignore <text>* : Agent will fully ignore text after '/ignore'
+- */agent* : Start chat with agent
+- */clear* : Clear your chat memory for agent
+- */q* : Stop chat with agent
+- */help* : Show this menu
 
 *WARNING* : Currently I am in development stage, so please be kind :)`;
 
