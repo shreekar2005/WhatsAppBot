@@ -10,12 +10,14 @@ yarn-error.log*
 auth_info/
 
 # bot memory & knowledge (privacy & runtime data)
-bantu_memory.json
-bantu_knowledge.txt
+agent_memory.json
+owner_info.txt
+owner_status.txt
+agent_config.json
 
 # system files
 .DS_Store
 Thumbs.db
 
-# environment variables (good practice to add now)
+# environment variables
 .env

@@ -1,51 +1,32 @@
-# WhatsApp Bot (Bantu 🐒)
+# WhatsApp AI Helper Agent
 
-This project implements an AI-powered WhatsApp assistant using the **Baileys** library and **Ollama** (local LLM). The bot, named "Bantu," features a distinct personality, maintains persistent conversation memory, and allows for real-time knowledge updates without restarting the server.
+This project implements a fully customizable AI-powered WhatsApp assistant using the **Baileys** library and **Ollama** (local LLM). The bot features a distinct personality, maintains persistent conversation memory, and allows for real-time status and knowledge updates via a configuration file.
 
 ### Directory Structure
 
 ```text
 .
-├── auth_info/           # Session credentials (generated automatically) (ignored by git)
-├── node_modules/        # Dependencies (ignored by git)
-├── bot.js               # Main bot logic
-├── bantu_memory.json    # Stores user conversation history (generated automatically)
-├── bantu_knowledge.txt  # Real-time knowledge base for the AI (create manually)
+├── auth_info/           # Session credentials (generated automatically)
+├── node_modules/        # Dependencies
+├── index.js             # Main bot logic
+├── agent_config.json    # Configuration (Name, Style, Rules)
+├── agent_memory.json    # Stores user conversation history (Auto-generated)
+├── owner_status.txt     # Real-time Status file (Auto-generated/Editable)
+├── owner_info.txt       # Real-time Facts file (Auto-generated/Editable)
 ├── package.json         # NPM configuration
 ├── package-lock.json    # Dependency lock file
 └── README.md
 ```
 
-> **Note:** The `auth_info/` folder contains sensitive session data. The `bantu_memory.json` file contains chat history. Neither should be committed to public repositories.
+> **Note:** The `auth_info/` folder, `agent_config.json`, and memory files contain sensitive data and are excluded from git.
 
 ### Key Features
 
-1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent, witty, and context-aware responses in "Hinglish."
-2. **Persistent Memory:** Saves the last 30 messages per user to `bantu_memory.json`, allowing the bot to remember context even after a server restart.
-3. **Dynamic Knowledge:** Reads from `bantu_knowledge.txt` on every message. You can update this file to change the bot's status or knowledge in real-time without stopping the code.
-4. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
-5. **Command System:** Users can start/stop the AI session using commands to avoid spamming.
-
-### How it Works
-
-The bot operates on an event-based architecture:
-
-1. **Authentication:**
-* Uses `useMultiFileAuthState` to store session credentials in `auth_info`.
-* Generates a QR code on the first run for linking your WhatsApp account.
-
-
-2. **AI Processing (Ollama):**
-* When a user activates the bot (via `/bantu`), messages are sent to a local Ollama instance.
-* The bot injects a "System Prompt" containing the current time, personality guidelines, and content from `bantu_knowledge.txt`.
-
-
-3. **Memory Management:**
-* Conversation history is loaded from `bantu_memory.json` on startup.
-* After every reply, the updated history is saved back to the file.
-* To manage token limits, only the last 30 messages are stored per user.
-
-
+1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent, witty, and context-aware responses.
+2. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
+3. **Persistent Memory:** Saves the last 30 messages per user to `agent_memory.json`.
+4. **Owner Control Group:** A specific WhatsApp group ("Bantu-PA") acts as a control room to wake/sleep the bot, update status, or add facts commands.
+5. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
 
 ### Prerequisites
 
@@ -56,53 +37,78 @@ The bot operates on an event-based architecture:
 ### How to Run
 
 1. **Clone the repository**
+
 ```bash
-git clone https://github.com/shreekar2005/WhatsAppBot.git
+git clone https://github.com/your-username/WhatsAppBot.git
 cd WhatsAppBot
 ```
 
-
 2. **Install dependencies**
+
 ```bash
 npm install
 ```
 
+3. **Setup Configuration**
+Create a file named `agent_config.json` in the root folder:
 
-3. **Setup Ollama**
-Make sure Ollama is running and you have the model downloaded.
+```json
+{
+  "owner_name": "Shreekar",
+  "agent_name": "Bantu",
+  "owner_group_name": "Bantu-PA",
+  "forbidden_words": ["SecretKey"],
+  "my_style": ["- Be funny", "- Speak Hinglish"],
+  "security_rules": ["- No passwords"]
+}
+```
+
+4. **Setup Ollama**
+Ensure Ollama is running:
+
 ```bash
 ollama pull llama3.1
-# Keep Ollama running in a separate terminal or background service
 ```
-
-
-4. **Create Knowledge File (Optional)**
-Create a file named `bantu_knowledge.txt` in the root folder to give the bot initial context.
-```text
-STATUS: Shreekar is currently coding.
-PROJECT: Working on the WhatsApp AI Bot.
-```
-
 
 5. **Start the bot**
+
 ```bash
-node bot.js
+node index.js
 ```
 
-
 6. **Scan QR Code**
+
 * The terminal will display a QR code.
 * Open WhatsApp on your phone -> Three dots -> Linked devices -> Link a device.
 * Scan the code.
 
+7. **Create Control Group**
 
+* Create a new WhatsApp group containing only yourself.
+* **Important:** Name the group exactly **`Bantu-PA`** (or whatever you set in `agent_config.json`).
+* This group acts as your "Command Center".
+* Type `/help` in this group to confirm the bot is listening.
 
 ### Usage Commands
 
-Once the bot is running, users can interact with it using the following commands:
+#### 🌍 Public Commands (In personal chats)
 
-* **`/bantu`** : Wake up the AI and start a conversation.
-* **`/q`** or **`/exit`** : End the session (the bot stops replying to that user).
+* **`/agent`** : Wake up the AI and start a conversation.
+* **`/q`** or **`/exit`** : End the session.
 * **`/help`** : Show the menu of commands.
+* **`/clear`** : Wipe your personal chat history with the bot.
 
-If a user who hasn't started a session messages you, the bot will send a one-time automated reply informing them that you are busy and how to activate Bantu.
+#### 👑 Owner Commands (In "Bantu-PA" (or whatever you set in `agent_config.json`) Group chat)
+
+* **`/wake`** & **`/sleep`** : Turn the bot ON or OFF globally.
+* **`/mystatus [msg]`** : Update the owner's current status (e.g., "Driving").
+* **`/myinfo [msg]`** : Add a permanent fact about the owner.
+* **`/status`** : View system health and uptime.
+* **`/clear`** : System-wide memory wipe.
+
+---
+
+### Troubleshooting
+
+* **Bot replies "Server is unreachable":** Ensure Ollama is running (`ollama serve`).
+* **Bot is sleeping:** The bot starts in Sleep mode by default. Go to your Control Group and type `/wake`.
