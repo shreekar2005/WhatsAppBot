@@ -219,9 +219,11 @@ async function startAgent() {
 `*${CONFIG.agent_name} Control Center*
 - */wake* : Activate Agent
 - */sleep* : Deactivate Agent
+- */status* : Check Agent Status
+- */agentname* : Check Agent Name
+- */agentname [name]* : Change Agent Name
 - */mystatus* : Check Owner Status
 - */mystatus [msg]* : Update Owner Status
-- */status* : Check Agent Status
 - */myinfo* : View Facts about Owner
 - */myinfo [msg]* : Add Fact about Owner
 - */clear* : Wipe All chats Memory (RESET AGENT)`;
@@ -248,10 +250,21 @@ async function startAgent() {
                     }
                 }
                 else if (cmdLower === "/status") {
-                    const stateIcon = IS_AGENT_ACTIVE ? "✅ AWAKE" : "💤 SLEEPING";
                     const { status } = getKnowledgeBase();
+                    
+                    // Logic: Calculate uptime and determine the status emoji/text
                     const uptimeMin = (process.uptime() / 60).toFixed(1);
-                    const report = `*${CONFIG.agent_name} Health Report*\n\n*State:* ${stateIcon}\n*Mode:* ${IS_AGENT_ACTIVE ? "Active" : "Silent"}\n*Knowledge:* "${status}"\n*Active Chats:* ${chatHistory.size}\n*Uptime:* ${uptimeMin} mins`;
+                    const stateText = IS_AGENT_ACTIVE ? "✅ AWAKE & ACTIVE" : "💤 SLEEPING (SILENT)";
+
+                    // Clean, readable template for the WhatsApp message
+                    const report = 
+`📊 *${CONFIG.agent_name} Health Report*
+
+👤 *State:* ${stateText}
+🧠 *Knowledge:* "${status || 'Empty'}"
+💬 *Active Chats:* ${chatHistory.size}
+⏱️ *Uptime:* ${uptimeMin} mins`.trim();
+
                     await sock.sendMessage(sender, { text: report });
                 }
                 else if (cmdLower === "/clear mystatus") {
@@ -276,6 +289,23 @@ async function startAgent() {
                 else if (cmdLower === "/wake") { 
                     IS_AGENT_ACTIVE = true; 
                     await sock.sendMessage(sender, { text: `⚡ ${CONFIG.agent_name} is now AWAKE.` }); 
+                }
+                else if (cmd.startsWith("/agentname")) {
+                    const newName = text.slice(10).trim(); // Slice after "/agentname"
+                    if (newName.length > 0) {
+                        // Update the live config and the file
+                        CONFIG.agent_name = newName;
+                        
+                        // Save to file so it persists after restart
+                        const currentConfig = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')) : {};
+                        currentConfig.agent_name = newName;
+                        fs.writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
+
+                        await sock.sendMessage(sender, { text: `✅ Agent renamed to: *${newName}*` });
+                    } else {
+                        // Just show the current name
+                        await sock.sendMessage(sender, { text: `ℹ️ Current Agent Name: *${CONFIG.agent_name}*` });
+                    }
                 }
                 return; 
             }
