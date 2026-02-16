@@ -1,14 +1,34 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
+const path = require('path');
+
+//  AI CONFIGURATION
+let OPENROUTER_API_KEY = "";
+try {
+    const keyPath = path.join(__dirname, '.env', 'openrouter_key.json');
+    if (fs.existsSync(keyPath)) {
+        const secretData = JSON.parse(fs.readFileSync(keyPath, 'utf-8'));
+        OPENROUTER_API_KEY = secretData.api_key;
+        console.log("✅ Loaded OpenRouter Key securely.");
+    } else {
+        console.warn("⚠️ Warning: Key file not found at .env/openrouter_key.json");
+    }
+} catch (err) {
+    console.error("❌ Error reading API key:", err.message);
+}
+
+const USE_CLOUD_FIRST = true; // Set 'false' if you want to use Local Ollama first
+const CLOUD_MODEL = "google/gemini-2.0-flash-lite-preview-02-05:free"; // Primary Cloud Model (Fastest & Best for Chat)
+const LOCAL_MODEL = "llama3.1"; // Backup Local Model
 
 
 // CONFIGURATION & SETTINGS
 
-const MEMORY_FILE = 'agent_memory.json';
-const KNOWLEDGE_FILE = 'owner_status.txt'; 
-const INFO_FILE = 'owner_info.txt';        
-const CONFIG_FILE = 'agent_config.json';   
+const MEMORY_FILE = path.join(__dirname, 'agent_memory.json');
+const KNOWLEDGE_FILE = path.join(__dirname, 'owner_status.txt'); 
+const INFO_FILE = path.join(__dirname, 'owner_info.txt');        
+const CONFIG_FILE = path.join(__dirname, 'agent_config.json');
 
 let CONFIG = {
     owner_name: "Admin",
@@ -112,46 +132,107 @@ ${CONFIG.security_rules}
 `;
 }
 
-// OLLAMA STUFF
-async function askOllama(senderID, userText) {
-    try {
-        let userContext = chatHistory.get(senderID) || [];
-        userContext.push({ role: 'user', content: userText });
+// LLM STUFF
+async function askLLM(senderID, userText) {
+    // 1. PREPARE CONTEXT
+    let userContext = chatHistory.get(senderID) || [];
+    userContext.push({ role: 'user', content: userText });
 
-        if (userContext.length > 30) userContext = userContext.slice(-30);
+    // Keep memory short (last 30 messages) to save costs/speed
+    if (userContext.length > 30) userContext = userContext.slice(-30);
 
-        const payloadMessages = [
-            { role: 'system', content: getSystemPrompt() },
-            ...userContext
-        ];
+    const payloadMessages = [
+        { role: 'system', content: getSystemPrompt() },
+        ...userContext
+    ];
 
+    let cleanReply = "";
+
+    // --- HELPER: CALL OPENROUTER ---
+    const callOpenRouter = async () => {
+        // console.log("☁️ Trying OpenRouter...");
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                'HTTP-Referer': 'http://localhost:3000',
+                'X-Title': 'WhatsApp Bot'
+            },
+            body: JSON.stringify({
+                model: CLOUD_MODEL,
+                messages: payloadMessages,
+                stream: false,
+                temperature: 0.7,
+                max_tokens: 1000
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.text();
+            throw new Error(`OpenRouter Error: ${response.status} - ${errData}`);
+        }
+        
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content;
+    };
+
+    // --- HELPER: CALL LOCAL OLLAMA ---
+    const callOllama = async () => {
+        // console.log("🦙 Trying Local Ollama...");
         const response = await fetch('http://127.0.0.1:11434/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'llama3.1',
+                model: LOCAL_MODEL,
                 messages: payloadMessages,
                 stream: false,
                 options: { num_ctx: 4096, num_predict: 1000, temperature: 0.7 }
             })
         });
 
-        const data = await response.json();
-        const rawReply = data.message?.content || "I'm having trouble thinking right now.";
-        const cleanReply = scrubSensitiveData(rawReply);
-
-        userContext.push({ role: 'assistant', content: cleanReply });
+        if (!response.ok) throw new Error(`Ollama Error: ${response.status}`);
         
-        chatHistory.set(senderID, userContext);
-        saveMemory(chatHistory);
+        const data = await response.json();
+        return data.message?.content;
+    };
 
-        await delay(1000 + Math.random() * 1000);
-        return cleanReply;
-
-    } catch (error) {
-        console.error("ollama error:", error);
-        return "Server is unreachable.";
+    // 2. EXECUTE WITH FALLBACK LOGIC
+    try {
+        if (USE_CLOUD_FIRST) {
+            try {
+                cleanReply = await callOpenRouter();
+            } catch (cloudErr) {
+                console.error("⚠️ Cloud failed, switching to Local:", cloudErr.message);
+                cleanReply = await callOllama();
+            }
+        } else {
+            try {
+                cleanReply = await callOllama();
+            } catch (localErr) {
+                console.error("⚠️ Local failed, switching to Cloud:", localErr.message);
+                cleanReply = await callOpenRouter();
+            }
+        }
+    } catch (finalError) {
+        console.error("❌ All AI providers failed:", finalError);
+        return "I'm having trouble connecting to my brain right now.";
     }
+
+    // 3. FINAL CLEANUP & SAVE
+    if (!cleanReply) cleanReply = "I'm speechless.";
+
+    // Scrub secrets (like passwords/names) from the reply
+    cleanReply = scrubSensitiveData(cleanReply);
+
+    // Save to memory
+    userContext.push({ role: 'assistant', content: cleanReply });
+    chatHistory.set(senderID, userContext);
+    saveMemory(chatHistory);
+
+    // Natural typing delay
+    await delay(1000 + Math.random() * 1000);
+    return cleanReply;
 }
 
 
@@ -378,7 +459,7 @@ async function startAgent() {
         if (activeSessions.has(sender)) {
             // User is in a session - talk to AI
             await sock.sendPresenceUpdate('composing', sender);
-            const aiReply = await askOllama(sender, text);
+            const aiReply = await askLLM(sender, text);
             await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : ` + aiReply });
             await sock.sendPresenceUpdate('paused', sender);
         } else {
