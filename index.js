@@ -19,7 +19,7 @@ try {
     console.error("❌ Error reading API key:", err.message);
 }
 
-const USE_CLOUD_FIRST = true; // If you want to default to OLLAMA LLM then set it "false"
+const USE_CLOUD_FIRST = false; // If you want to default to OLLAMA LLM then set it "false"
 const CLOUD_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"; 
 const LOCAL_MODEL = "llama3.1"; 
 

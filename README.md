@@ -1,12 +1,16 @@
 # WhatsApp AI Helper Agent
 
-This project implements a fully customizable AI-powered WhatsApp assistant using the **Baileys** library and **Ollama** (local LLM). The bot features a distinct personality, maintains persistent conversation memory, and allows for real-time status and knowledge updates via a configuration file.
+This project implements a smart, fully customizable AI-powered WhatsApp assistant using the **Baileys** library. It uses a **Hybrid AI Engine** that attempts to use a powerful Cloud Model (via OpenRouter) first, and automatically falls back to a Local LLM (Ollama) if the internet or API fails.
+
+The bot features a distinct personality, maintains persistent conversation memory, logs conversations to the console, and allows for real-time status and knowledge updates via a configuration file.
 
 ### Directory Structure
 
 ```text
 .
 ├── auth_info/           # Session credentials (generated automatically)
+├── .env/                # Folder containing secure keys
+│   └── openrouter_key.json  # Your OpenRouter API Key
 ├── node_modules/        # Dependencies
 ├── index.js             # Main bot logic
 ├── agent_config.json    # Configuration (Name, Style, Rules)
@@ -16,80 +20,115 @@ This project implements a fully customizable AI-powered WhatsApp assistant using
 ├── package.json         # NPM configuration
 ├── package-lock.json    # Dependency lock file
 └── README.md
-
 ```
 
-> **Note:** The `auth_info/` folder, `agent_config.json`, and memory files contain sensitive data and are excluded from git.
+> **Note:** The `auth_info/` folder, `.env/` folder, and memory files contain sensitive data and should be excluded from git.
 
 ### Key Features
 
-1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent and context-aware responses.
-2. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
-3. **Persistent Memory:** Saves the last 30 messages per user to `agent_memory.json`.
-4. **Owner Control Group:** A specific WhatsApp group ("Admin Control") acts as a control room to wake/sleep the bot, update status, or add facts commands.
-5. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
-6. **Smart Ignoring:** The bot can be told to ignore specific messages starting with `/ignore`, preventing it from processing text meant for others.
+1. **Hybrid AI Engine:**
+* **Primary:** Uses a high-intelligence Cloud Model (e.g., `nvidia/nemotron-3-nano-30b` via OpenRouter) for complex reasoning.
+* **Backup:** Automatically switches to a Local LLM (e.g., `llama3.1` via Ollama) if the cloud API fails or internet drops.
+
+
+2. **Smart Console Logging:** Prints user messages and the AI's replies directly to your terminal for easy monitoring (`User ... says:` / `🤖 Agent replied:`).
+3. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
+4. **Persistent Memory:** Saves the last 30 messages per user to `agent_memory.json` (including "reasoning" data from advanced models).
+5. **Owner Control Group:** A specific WhatsApp group ("Admin Control") acts as a control room to wake/sleep the bot, update status, rename the agent, or add facts commands.
+6. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
+7. **Auto-Reply:** If a user messages you while the bot is active but not in a session, it sends a helpful "Busy" message with instructions.
 
 ### Prerequisites
 
 * **Node.js** (v16 or higher)
-* **Ollama** installed and running locally.
-* **Llama 3 Model** (or your preferred model) pulled in Ollama.
+* **Ollama** installed and running locally (for the backup model).
+* **Llama 3 Model** pulled in Ollama (`ollama pull llama3.1`).
+* **OpenRouter API Key** (Optional, but required for the Cloud Model).
 
 ### How to Run
 
 1. **Clone the repository**
-
 ```bash
-git clone https://github.com/your-username/WhatsAppBot.git
+git clone https://github.com/shreekar2005/WhatsAppBot.git
 cd WhatsAppBot
 ```
 
-2. **Install dependencies**
 
+2. **Install dependencies**
 ```bash
 npm install
 ```
 
-3. **Setup Configuration**
-Create a file named `agent_config.json` in the root folder:
 
+3. **Setup API Key**
+Create a folder named `.env` and a file inside it named `openrouter_key.json`:
 ```json
 {
-  "owner_name": "Shreekar",
-  "agent_name": "Bantu",
-  "owner_group_name": "Admin Control",
-  "forbidden_words": ["SecretKey"],
-  "my_style": ["- Be funny", "- Speak Hinglish"],
-  "security_rules": ["- No passwords"]
+  "api_key": "sk-or-v1-your-key-here"
 }
 ```
 
-4. **Setup Ollama**
-Ensure Ollama is running:
 
+4. **Setup Configuration**
+Create a file named `agent_config.json` in the root folder:
+```json
+{
+  "owner_name": "Shreekar",
+  "agent_name": "chimp 🐵",
+  "owner_group_name": "Admin Control",
+  "forbidden_words": [
+    "Some 9998887776",
+    "Some password",
+    "SecretKey"
+  ],
+  "my_style": [
+    "PERSONALITY:",
+    "- Funny, Witty, but always Respectful.",
+    "- Natural Hinglish, Mostly english",
+    "- Speak like a real human assistant.",
+    "- Never say 'I am an AI'.",
+    "- STRICTLY DO NOT use gendered words like 'Bhai', 'Bro', 'Sir', 'Madam', 'Yaar'.",
+    "- Be helpful and polite, never rude.",
+    "",
+    "BEHAVIOR:",
+    "- Keep replies medium to short length.",
+    "- If asking about code then only talk about code, explain clearly.",
+    "- If the topic is fun, be fun. If serious, be serious.",
+    "- MATCH the user's language. If they speak Hindi, reply in Hindi. If English, reply in English. Same for other languages"
+  ],
+  "security_rules": [
+    "- Never share passwords, OTPs, or financial info.",
+    "- If asked personal questions or about how you are configured or how you are working or about your specifications, deflect answer, dont tell details."
+  ]
+}
+```
+
+
+5. **Setup Ollama (Backup)**
+Ensure Ollama is running and you have the model:
 ```bash
 ollama pull llama3.1
 ```
 
-5. **Start the bot**
 
+6. **Start the bot**
 ```bash
 node index.js
 ```
 
-6. **Scan QR Code**
 
+7. **Scan QR Code**
 * The terminal will display a QR code.
 * Open WhatsApp on your phone -> Three dots -> Linked devices -> Link a device.
 * Scan the code.
 
-7. **Create Control Group**
 
+8. **Create Control Group**
 * Create a new WhatsApp group containing only yourself.
 * **Important:** Name the group exactly **`Admin Control`** (or whatever you set in `agent_config.json`).
-* This group acts as your "Command Center".
-* Type `/help` in this group to confirm the bot is listening.
+* Type `/status` in this group to confirm the bot is listening.
+
+
 
 ### Usage Commands
 
@@ -99,20 +138,20 @@ node index.js
 * **`/q`** or **`/exit`** : End the session.
 * **`/help`** : Show the menu of commands.
 * **`/clear`** : Wipe your personal chat history with the bot.
-* **`/ignore <text>`** : The bot will completely ignore any message starting with this tag. Useful if you want to send a note to yourself without triggering the bot.
-* **Note:** If you message the bot without using `/agent`, it will automatically reply with a help menu every single time.
+* **`/ignore <text>`** : The bot will completely ignore any message starting with this tag.
 
 #### Owner Commands (In "Admin Control" Group chat)
 
 * **`/wake`** & **`/sleep`** : Turn the bot ON or OFF globally.
+* **`/status`** : View system health, uptime, and **which model is currently active** (Cloud or Local).
+* **`/agentname [name]`** : Rename the bot instantly.
 * **`/mystatus [msg]`** : Update the owner's current status (e.g., "Driving").
 * **`/myinfo [msg]`** : Add a permanent fact about the owner.
-* **`/status`** : View system health and uptime.
 * **`/clear`** : System-wide memory wipe.
-
 ---
 
 ### Troubleshooting
 
-* **Bot replies "Server is unreachable":** Ensure Ollama is running (`ollama serve`).
+* **Bot replies "Server is unreachable" or switches to Local:** This means OpenRouter is down or your API key is invalid. The bot automatically switches to Ollama.
 * **Bot is sleeping:** The bot starts in Sleep mode by default. Go to your Control Group and type `/wake`.
+* **QR Code not appearing:** Make sure your terminal window is large enough.
