@@ -16,17 +16,19 @@ This project implements a fully customizable AI-powered WhatsApp assistant using
 ├── package.json         # NPM configuration
 ├── package-lock.json    # Dependency lock file
 └── README.md
+
 ```
 
 > **Note:** The `auth_info/` folder, `agent_config.json`, and memory files contain sensitive data and are excluded from git.
 
 ### Key Features
 
-1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent, witty, and context-aware responses.
+1. **AI Integration:** Uses a local LLM (via Ollama) to generate intelligent and context-aware responses.
 2. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
 3. **Persistent Memory:** Saves the last 30 messages per user to `agent_memory.json`.
 4. **Owner Control Group:** A specific WhatsApp group ("Bantu-PA") acts as a control room to wake/sleep the bot, update status, or add facts commands.
 5. **Privacy Focused:** Automatically redacts sensitive patterns (like phone numbers or passwords) before saving to memory.
+6. **Smart Ignoring:** The bot can be told to ignore specific messages starting with `/ignore`, preventing it from processing text meant for others.
 
 ### Prerequisites
 
@@ -91,14 +93,16 @@ node index.js
 
 ### Usage Commands
 
-#### 🌍 Public Commands (In personal chats)
+#### Public Commands (In personal chats)
 
 * **`/agent`** : Wake up the AI and start a conversation.
 * **`/q`** or **`/exit`** : End the session.
 * **`/help`** : Show the menu of commands.
 * **`/clear`** : Wipe your personal chat history with the bot.
+* **`/ignore <text>`** : The bot will completely ignore any message starting with this tag. Useful if you want to send a note to yourself without triggering the bot.
+* **Note:** If you message the bot without using `/agent`, it will automatically reply with a help menu every single time.
 
-#### 👑 Owner Commands (In "Bantu-PA" (or whatever you set in `agent_config.json`) Group chat)
+#### Owner Commands (In "Bantu-PA" Group chat)
 
 * **`/wake`** & **`/sleep`** : Turn the bot ON or OFF globally.
 * **`/mystatus [msg]`** : Update the owner's current status (e.g., "Driving").

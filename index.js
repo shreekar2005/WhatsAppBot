@@ -5,7 +5,6 @@ const fs = require('fs');
 
 // CONFIGURATION & SETTINGS
 
-
 const MEMORY_FILE = 'agent_memory.json';
 const KNOWLEDGE_FILE = 'owner_status.txt'; 
 const INFO_FILE = 'owner_info.txt';        
@@ -13,7 +12,7 @@ const CONFIG_FILE = 'agent_config.json';
 
 let CONFIG = {
     owner_name: "Admin",
-    agent_name: "Bot",
+    agent_name: "Agent",
     owner_group_name: "Admin Control",
     forbidden_words: [],
     my_style: "",
@@ -42,7 +41,7 @@ loadConfig();
 
 let chatHistory = loadMemory();
 let activeSessions = new Map();
-let greetedUsers = new Set();
+// greetedUsers is no longer needed since we reply every time now
 let OWNER_GROUP_ID = null; 
 let IS_AGENT_ACTIVE = false; // default: sleeping 💤
 
@@ -187,6 +186,9 @@ async function startAgent() {
         
         if (!text) return;
 
+        // If message starts with /ignore, do absolutely nothing.
+        if (text.trim().toLowerCase().startsWith('/ignore')) return;
+
         
         // GUARD BLOCK
         if (text.startsWith(`${CONFIG.agent_name} :`)) return;
@@ -264,7 +266,7 @@ async function startAgent() {
                     chatHistory.clear(); 
                     saveMemory(chatHistory); 
                     activeSessions.clear(); 
-                    greetedUsers.clear(); 
+                    // greetedUsers.clear(); // No longer needed
                     await sock.sendMessage(sender, { text: "🧹 SYSTEM RESET: All memories wiped." }); 
                 }
                 else if (cmdLower === "/sleep") { 
@@ -284,11 +286,11 @@ async function startAgent() {
         
         // SELF-CHAT HANDLING (TESTING ONLY - NO ADMIN POWERS)
 
-        const botId = sock.user.id.split(':')[0] + "@s.whatsapp.net";
-        const botLid = sock.user.lid;
+        const agentId = sock.user.id.split(':')[0] + "@s.whatsapp.net";
+        const agentLid = sock.user.lid;
 
         if (msg.key.fromMe) {
-            const isSelf = (sender === botId) || (sender === botLid) || (sender.endsWith('@lid'));
+            const isSelf = (sender === agentId) || (sender === agentLid) || (sender.endsWith('@lid'));
             if (!isSelf) return;
         }
 
@@ -300,6 +302,7 @@ async function startAgent() {
 
         if (cmd === '/agent') {
             if (!IS_AGENT_ACTIVE) {
+                // If the agent is globally sleeping (Admin command /sleep), we warn them.
                 await sock.sendMessage(sender, { text: `💤 ${CONFIG.agent_name} is currently sleeping. Please contact ${CONFIG.owner_name} directly.` });
                 return;
             }
@@ -308,7 +311,7 @@ async function startAgent() {
             return;
         }
 
-        // STOP HERE IF SLEEPING
+        // STOP HERE IF SLEEPING (Admin Global Sleep)
         if (!IS_AGENT_ACTIVE) return;
 
         if (cmd === '/q' || cmd === '/exit') {
@@ -327,43 +330,41 @@ async function startAgent() {
 
         if (cmd === '/help' || cmd === 'help') {
             const helpMsg = 
-`Commands for ${CONFIG.agent_name}
+`Commands for Agent ${CONFIG.agent_name}
 
-*/agent* : Start Chat
-*/clear* : Clear memory
-*/q* : Stop Chat
+*/ignore <text>* : Agent will fully ignore text after '/ignore'
+*/agent* : Start chat with agent
+*/clear* : Clear your chat memory for agent
+*/q* : Stop chat with agent
 */help* : Show this menu
 
-*WARNING* : Currently I am in developing stage, so please be kind :)`;
+*WARNING* : Currently I am in development stage, so please be kind :)`;
             await sock.sendMessage(sender, { text: helpMsg });
             return;
         }
 
         if (activeSessions.has(sender)) {
+            // User IS in a session - talk to AI
             await sock.sendPresenceUpdate('composing', sender);
             const aiReply = await askOllama(sender, text);
             await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : ` + aiReply });
             await sock.sendPresenceUpdate('paused', sender);
         } else {
-            const isSelf = (sender === botId) || (sender.endsWith('@lid'));
             
-            // Auto-Greeting
-            if (!greetedUsers.has(sender)) {
-                const autoMessage = 
+            const autoMessage = 
 `*${CONFIG.owner_name} is Busy!*
 
 I am his assistant "${CONFIG.agent_name}"
 
-*/agent* : Start Chat
-*/clear* : Clear memory
-*/q* : Stop Chat
+*/ignore <text>* : Agent will fully ignore text after '/ignore'
+*/agent* : Start chat with agent
+*/clear* : Clear your chat memory for agent
+*/q* : Stop chat with agent
 */help* : Show this menu
 
-*WARNING* : Currently I am in developing stage, so please be kind :)`;
+*WARNING* : Currently I am in development stage, so please be kind :)`;
 
-                await sock.sendMessage(sender, { text: autoMessage });
-                greetedUsers.add(sender);
-            }
+            await sock.sendMessage(sender, { text: autoMessage });
         }
     });
 }
