@@ -5,7 +5,7 @@ const { CONFIG, MEMORY_FILE, KNOWLEDGE_FILE, INFO_FILE, CONFIG_FILE, USE_CLOUD_F
 const { updateStatus, appendInfo, getKnowledgeBase } = require('./src/utils');
 const { askLLM } = require('./src/handleLLM');
 
-// --- STATE VARIABLES (CRITICAL TO KEEP HERE) ---
+// state variables
 let chatHistory = new Map();
 if (fs.existsSync(MEMORY_FILE)) {
     try { chatHistory = new Map(JSON.parse(fs.readFileSync(MEMORY_FILE, 'utf-8'))); } 
@@ -13,10 +13,10 @@ if (fs.existsSync(MEMORY_FILE)) {
 }
 
 let activeSessions = new Map();
+let mutedUsers = new Map(); // tracks users who paused auto-reply
 let OWNER_GROUP_ID = null; 
-let IS_AGENT_ACTIVE = false; // default: sleeping 💤
+let IS_AGENT_ACTIVE = false; 
 
-// Helper to save memory explicitly if needed in index.js
 function saveMemory() {
     try { fs.writeFileSync(MEMORY_FILE, JSON.stringify([...chatHistory])); } 
     catch (err) { console.error("error saving memory:", err); }
@@ -46,31 +46,67 @@ async function startAgent() {
         const msg = messages[0];
         if (!msg.message || !msg.key.remoteJid) return;
 
-        const sender = msg.key.remoteJid;
-        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-        
-        if (!text) return;
-        if (text.trim().toLowerCase().startsWith('/ignore')) return;
+        // --- 1. DEFINING THE "ROOM" (Chat Context) ---
+        let roomLid = msg.key.remoteJid;
 
-        // GUARD BLOCK
-        if (text.startsWith(`${CONFIG.agent_name} :`)) return;
-        if (text.startsWith(`*${CONFIG.owner_name} is Busy!*`)) return;
-        if (text.startsWith(`Commands for Agent ${CONFIG.agent_name}`)) return;
         
-        // --- ADMIN GROUP LOGIC (Kept in index.js to ensure connection) ---
-        if (sender.endsWith('@g.us')) {
+        // --- 2. DEFINING THE "SENDER" (Who spoke) ---
+        // If it's a group, the sender is 'participant'.
+        let senderLid = msg.key.participant;
+
+        // --- 3. DEFINING ME ---
+        const myOwnLid = sock.user.lid.split(':')[0] + "@lid"; // my lid = my (message yourself) chats lid
+        // if(msg.key.fromMe) actualSender=myOwnLid;
+
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        if (!text) return;
+
+        // guard blocks
+        let textByAgent = false;
+        if (text.startsWith(`${CONFIG.agent_name} `)) textByAgent=true;
+        if (text.startsWith(`*${CONFIG.agent_name} `)) textByAgent=true;
+        if (text.startsWith(`💤 ${CONFIG.agent_name} `)) textByAgent=true;
+        if (text.startsWith(`*${CONFIG.owner_name} is Busy!*`)) textByAgent=true;
+        if (text.startsWith(`Commands for Agent ${CONFIG.agent_name}`)) textByAgent=true;
+
+        // --- 5. DISPLAY NAMES ---
+        let userName = msg.pushName;
+        if (msg.key.fromMe) {
+            userName = textByAgent ? `${CONFIG.agent_name}` : "YOU (Owner)";
+        }
+        if (!userName) userName = "Unknown User";
+
+        // --- 6. CHECK GROUP STATUS ---
+        const isGroup = roomLid.endsWith('@g.us');
+        const isNoteToSelf = !isGroup && msg.key.fromMe && (roomLid === myOwnLid);
+
+        // --- 7. BETTER LOGGING ---
+        let chatType = isGroup ? "[Group Chat]" : "[Private Chat]";
+        
+         
+        if(senderLid) console.log(`👤 Who: ${userName} (${senderLid})`);
+        else console.log(`👤 Who: ${userName}`);
+        console.log(`🏠 Chat: ${roomLid} ${chatType}`);
+        console.log(`💬 Msg: ${text}`);
+        console.log(`------------------------------------------------`);
+
+        if (text.trim().toLowerCase().startsWith('/ignore')) return;
+        if(textByAgent) return;
+
+        // admin group logic
+        if (isGroup) {
             if (!OWNER_GROUP_ID) {
                 try {
-                    const metadata = await sock.groupMetadata(sender);
+                    const metadata = await sock.groupMetadata(roomLid);
                     if (metadata.subject === CONFIG.owner_group_name) {
-                        OWNER_GROUP_ID = sender;
-                        await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Owner Group Connected! Type /help.` });
-                        console.log("Owner Group Linked:", OWNER_GROUP_ID);
+                        OWNER_GROUP_ID = roomLid;
+                        await sock.sendMessage(roomLid, { text: `${CONFIG.agent_name} : Owner Group Connected! Type /help.` });
+                        console.log("✅ Owner Group Linked:", OWNER_GROUP_ID);
                     }
                 } catch (err) {}
             }
 
-            if (sender === OWNER_GROUP_ID) {
+            if (roomLid === OWNER_GROUP_ID) {
                 const cmd = text.trim();
                 const cmdLower = cmd.toLowerCase();
                 
@@ -81,165 +117,119 @@ async function startAgent() {
 - */sleep* : Deactivate Agent
 - */status* : Check Agent Status
 - */agentname* : Check Agent Name
-- */agentname [name]* : Change Agent Name
-- */mystatus* : Check Owner Status
 - */mystatus [msg]* : Update Owner Status
-- */myinfo* : View Facts about Owner
-- */myinfo [msg]* : Add Fact about Owner
-- */clear* : Wipe All chats Memory (RESET AGENT)`;
-                    await sock.sendMessage(sender, { text: adminMenu });
-                }
-                else if (cmd.startsWith("/mystatus")) {
-                    const newStatus = text.slice(9).trim(); 
-                    if (newStatus.length > 0) {
-                        updateStatus(newStatus);
-                        await sock.sendMessage(sender, { text: `✅ Status Updated: "${newStatus}"` });
-                    } else {
-                        const currentStatus = getKnowledgeBase().status;
-                        await sock.sendMessage(sender, { text: `ℹ️ Current Status: "${currentStatus}"` });
-                    }
-                }
-                else if (cmd.startsWith("/myinfo")) {
-                    const newInfo = text.slice(7).trim(); 
-                    if (newInfo.length > 0) {
-                        appendInfo(newInfo);
-                        await sock.sendMessage(sender, { text: `✅ Fact Added: "${newInfo}"` });
-                    } else {
-                        const { facts } = getKnowledgeBase();
-                        await sock.sendMessage(sender, { text: `📜 *Stored Facts:*\n${facts}` });
-                    }
-                }
-                else if (cmdLower === "/status") {
-                    const { status } = getKnowledgeBase();
-                    const uptimeMin = (process.uptime() / 60).toFixed(1);
-                    const stateText = IS_AGENT_ACTIVE ? "✅ AWAKE & ACTIVE" : "💤 SLEEPING (SILENT)";
-                    const activeModel = USE_CLOUD_FIRST ? CLOUD_MODEL : LOCAL_MODEL;
-
-                    const report = 
-`📊 *${CONFIG.agent_name} Health Report*
-👤 *State:* ${stateText}
-🧠 *Owner Status:* "${status || 'Empty'}"
-🤖 *Model:* ${activeModel}
-💬 *Active Chats:* ${chatHistory.size}
-⏱️ *Uptime:* ${uptimeMin} mins`.trim();
-
-                    await sock.sendMessage(sender, { text: report });
-                }
-                else if (cmdLower === "/clear mystatus") {
-                    fs.writeFileSync(KNOWLEDGE_FILE, ""); 
-                    await sock.sendMessage(sender, { text: "🧹 Status cleared." });
-                }
-                else if (cmdLower === "/clear myinfo") {
-                    fs.writeFileSync(INFO_FILE, ""); 
-                    await sock.sendMessage(sender, { text: "🧹 All Facts deleted." });
-                }
-                else if (cmdLower === "/clear") { 
-                    chatHistory.clear(); 
-                    saveMemory(); 
-                    activeSessions.clear(); 
-                    await sock.sendMessage(sender, { text: "🧹 SYSTEM RESET: All memories wiped." }); 
-                }
-                else if (cmdLower === "/sleep") { 
-                    IS_AGENT_ACTIVE = false; 
-                    await sock.sendMessage(sender, { text: `💤 ${CONFIG.agent_name} is now SLEEPING.` }); 
+- */myinfo [msg]* : Add Fact
+- */clear* : Wipe Memory`;
+                    await sock.sendMessage(roomLid, { text: adminMenu });
                 }
                 else if (cmdLower === "/wake") { 
                     IS_AGENT_ACTIVE = true; 
-                    await sock.sendMessage(sender, { text: `⚡ ${CONFIG.agent_name} is now AWAKE.` }); 
+                    await sock.sendMessage(roomLid, { text: `⚡ ${CONFIG.agent_name} is now AWAKE.` }); 
                 }
-                else if (cmd.startsWith("/agentname")) {
-                    const newName = text.slice(10).trim();
-                    if (newName.length > 0) {
-                        CONFIG.agent_name = newName;
-                        const currentConfig = fs.existsSync(CONFIG_FILE) ? JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')) : {};
-                        currentConfig.agent_name = newName;
-                        fs.writeFileSync(CONFIG_FILE, JSON.stringify(currentConfig, null, 2));
-                        await sock.sendMessage(sender, { text: `✅ Agent renamed to: *${newName}*` });
-                    } else {
-                        await sock.sendMessage(sender, { text: `ℹ️ Current Agent Name: *${CONFIG.agent_name}*` });
-                    }
+                else if (cmdLower === "/sleep") { 
+                    IS_AGENT_ACTIVE = false; 
+                    await sock.sendMessage(roomLid, { text: `💤 ${CONFIG.agent_name} is now SLEEPING.` }); 
+                }
+                else if (cmdLower === "/status") {
+                    const { status } = getKnowledgeBase();
+                    const stateText = IS_AGENT_ACTIVE ? "✅ AWAKE" : "💤 SLEEPING";
+                    await sock.sendMessage(roomLid, { text: `📊 Status: ${stateText}\n🧠 Owner Status: ${status || 'Empty'}` });
+                }
+                else if (cmd.startsWith("/mystatus")) {
+                    const newStatus = text.slice(9).trim(); 
+                    if (newStatus.length > 0) updateStatus(newStatus);
+                    await sock.sendMessage(roomLid, { text: `✅ Status Updated` });
+                }
+                else if (cmd.startsWith("/myinfo")) {
+                    const newInfo = text.slice(7).trim(); 
+                    if (newInfo.length > 0) appendInfo(newInfo);
+                    await sock.sendMessage(roomLid, { text: `✅ Fact Added` });
+                }
+                else if (cmdLower === "/clear") { 
+                    chatHistory.clear(); saveMemory(); activeSessions.clear(); 
+                    await sock.sendMessage(roomLid, { text: "🧹 System Reset Done." }); 
                 }
                 return; 
             }
-            return; 
         }
 
-        // --- SELF CHAT FILTER ---
-        const agentId = sock.user.id.split(':')[0] + "@s.whatsapp.net";
-        const agentLid = sock.user.lid;
+        // self chat filter
         if (msg.key.fromMe) {
-            const isSelf = (sender === agentId) || (sender === agentLid) || (sender.endsWith('@lid'));
-            if (!isSelf) return;
+            if (isNoteToSelf) {
+                console.log("Self text detected!!!.");
+                console.log(`------------------------------------------------`);
+            } else {
+                return; // sent to a friend, ignore
+            }
         }
 
-        // --- USER LOGIC ---
-        console.log(`User ${sender} says: ${text}`);
+        // user logic
         const cmd = text.toLowerCase().trim();
 
         if (cmd === '/agent') {
             if (!IS_AGENT_ACTIVE) {
-                await sock.sendMessage(sender, { text: `💤 ${CONFIG.agent_name} is currently sleeping. Please contact ${CONFIG.owner_name} directly.` });
+                await sock.sendMessage(roomLid, { text: `💤 ${CONFIG.agent_name} is currently sleeping.` });
                 return;
             }
-            activeSessions.set(sender, true);
-            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Yes, how can I help?` });
+            activeSessions.set(roomLid, true);
+            await sock.sendMessage(roomLid, { text: `${CONFIG.agent_name} : Yes, how can I help?` });
             return;
         }
 
         if (cmd === '/clear') {
-            chatHistory.delete(sender);
-            activeSessions.delete(sender);
+            chatHistory.delete(roomLid);
+            activeSessions.delete(roomLid);
             saveMemory();
-            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : 🧹 Chat memory cleared` });
-            if (!IS_AGENT_ACTIVE) {
-                await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Going to sleep again 💤` });
-            }
+            await sock.sendMessage(roomLid, { text: `${CONFIG.agent_name} : 🧹 Memory cleared` });
             return;
         }
 
-        // STOP HERE IF SLEEPING
-        if (!IS_AGENT_ACTIVE) return;
-
-        if ((cmd === '/q' || cmd === '/exit') && activeSessions.has(sender)) {
-            activeSessions.delete(sender);
-            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : Bye bayeee! 👋` });
+        // new /sleep logic for users
+        if (cmd === '/sleep' && !isGroup) {
+            mutedUsers.set(roomLid, Date.now() + 30000); // 30 seconds
+            await sock.sendMessage(roomLid, { text: `💤 Got it. I'll stop sending automated messages to you for 30 seconds.` });
             return;
         }
 
-        if (cmd === '/help') {
-            const helpMsg = 
+        if (cmd === '/help' && !isGroup) {
+            const helpMenu = 
 `Commands for Agent ${CONFIG.agent_name}
 - */ignore <text>* : Agent will fully ignore text after '/ignore'
 - */agent* : Start chat with agent
 - */clear* : Clear your chat memory for agent
+- */sleep* : Pause auto-replies for 30sec
 - */q* : Stop chat with agent
 - */help* : Show this menu
 *WARNING* : Currently I am in development stage, so please be kind :)`;
-            await sock.sendMessage(sender, { text: helpMsg });
+            await sock.sendMessage(roomLid, { text: helpMenu });
             return;
         }
 
-        if (activeSessions.has(sender)) {
-            await sock.sendPresenceUpdate('composing', sender);
-            
-            // Call the LLM (which is now in handleLLM.js)
-            // We pass the chatHistory map so it can update memory
-            const aiReply = await askLLM(sender, text, chatHistory);
-            
-            console.log(`🤖 ${CONFIG.agent_name} replied: ${aiReply}`);
-            await sock.sendMessage(sender, { text: `${CONFIG.agent_name} : ` + aiReply });
-            await sock.sendPresenceUpdate('paused', sender);
-        } else {
-            const autoMessage = 
+        if (!IS_AGENT_ACTIVE) return;
+
+        if ((cmd === '/q' || cmd === '/exit') && activeSessions.has(roomLid)) {
+            activeSessions.delete(roomLid);
+            await sock.sendMessage(roomLid, { text: `${CONFIG.agent_name} : Bye! 👋` });
+            return;
+        }
+
+        if (activeSessions.has(roomLid)) {
+            await sock.sendPresenceUpdate('composing', roomLid);
+            const aiReply = await askLLM(roomLid, text, chatHistory);
+            await sock.sendMessage(roomLid, { text: `${CONFIG.agent_name} : ` + aiReply });
+            await sock.sendPresenceUpdate('paused', roomLid);
+        } else if (!isGroup) {
+            // check if user is in "silent" period
+            const muteExpiry = mutedUsers.get(roomLid);
+            if (muteExpiry && Date.now() < muteExpiry) return; 
+
+            // only send auto-message in private DMs
+            await sock.sendMessage(roomLid, { text: 
 `*${CONFIG.owner_name} is Busy!*
-I am his assistant "${CONFIG.agent_name}"
-- */ignore <text>* : Agent will fully ignore text after '/ignore'
-- */agent* : Start chat with agent
-- */clear* : Clear your chat memory for agent
-- */q* : Stop chat with agent
-- */help* : Show this menu
-*WARNING* : Currently I am in development stage, so please be kind :)`;
-            await sock.sendMessage(sender, { text: autoMessage });
+Assistant "${CONFIG.agent_name}" here.
+Type /agent to talk.
+Type /help for more help.
+Type /sleep to pause this automated message for 30sec` });
         }
     });
 }
