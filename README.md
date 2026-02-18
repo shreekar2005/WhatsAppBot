@@ -1,3 +1,21 @@
+# ⚠️ CRITICAL WARNING: READ BEFORE USING ⚠️
+
+**USE THIS PROJECT AT YOUR OWN RISK.**
+
+This project uses **Baileys**, an unofficial library that automates WhatsApp. Using automated bots, scripts, or unofficial clients on your personal WhatsApp account is a violation of WhatsApp's Terms of Service.
+
+**Potential Consequences:**
+* 🚫 **Temporary Ban:** You may be locked out of your account for 1-24 hours.
+* ❌ **Permanent Ban:** Your phone number may be permanently banned from using WhatsApp.
+
+**Safety Recommendations:**
+1.  **DO NOT** use this on your primary/personal phone number.
+2.  **USE A SECONDARY/VIRTUAL NUMBER** that you are willing to lose.
+3.  Avoid sending messages too quickly or to too many people at once.
+4.  The developers of this project are **not responsible** for any bans or lost data.
+
+---
+
 # WhatsApp AI Helper Agent
 
 This project implements a smart, fully customizable AI-powered WhatsApp assistant using the **Baileys** library. It uses a **Hybrid AI Engine** that attempts to use a powerful Cloud Model (via OpenRouter) first, and automatically falls back to a Local LLM (Ollama) if the internet or API fails.
@@ -27,9 +45,9 @@ The bot features a distinct personality, maintains persistent conversation memor
 ### Key Features
 
 1. **Hybrid AI Engine:**
+
 * **Primary:** Uses a high-intelligence Cloud Model (e.g., `nvidia/nemotron-3-nano-30b` via OpenRouter) for complex reasoning.
 * **Backup:** Automatically switches to a Local LLM (e.g., `llama3.1` via Ollama) if the cloud API fails or internet drops.
-
 
 2. **Smart Console Logging:** Prints user messages and the AI's replies directly to your terminal for easy monitoring (`User ... says:` / `🤖 Agent replied:`).
 3. **JSON Configuration:** Easily change the Bot's Name, Owner's Name, Personality, and Security Rules via `agent_config.json` without touching the code.
@@ -48,29 +66,30 @@ The bot features a distinct personality, maintains persistent conversation memor
 ### How to Run
 
 1. **Clone the repository**
+
 ```bash
-git clone https://github.com/shreekar2005/WhatsAppBot.git
+git clone [https://github.com/shreekar2005/WhatsAppBot.git](https://github.com/shreekar2005/WhatsAppBot.git)
 cd WhatsAppBot
 ```
 
-
 2. **Install dependencies**
+
 ```bash
 npm install
 ```
 
-
 3. **Setup API Key**
 Create a folder named `.env` and a file inside it named `openrouter_key.json`:
+
 ```json
 {
   "api_key": "sk-or-v1-your-key-here"
 }
 ```
 
-
 4. **Setup Configuration**
 Create a file named `agent_config.json` in the root folder:
+
 ```json
 {
   "owner_name": "Shreekar",
@@ -103,32 +122,30 @@ Create a file named `agent_config.json` in the root folder:
 }
 ```
 
-
 5. **Setup Ollama (Backup)**
 Ensure Ollama is running and you have the model:
+
 ```bash
 ollama pull llama3.1
 ```
 
-
 6. **Start the bot**
+
 ```bash
 node index.js
 ```
 
-
 7. **Scan QR Code**
+
 * The terminal will display a QR code.
 * Open WhatsApp on your phone -> Three dots -> Linked devices -> Link a device.
 * Scan the code.
 
-
 8. **Create Control Group**
+
 * Create a new WhatsApp group containing only yourself.
 * **Important:** Name the group exactly **`Admin Control`** (or whatever you set in `agent_config.json`).
 * Type `/status` in this group to confirm the bot is listening.
-
-
 
 ### Usage Commands
 
@@ -148,6 +165,7 @@ node index.js
 * **`/mystatus [msg]`** : Update the owner's current status (e.g., "Driving").
 * **`/myinfo [msg]`** : Add a permanent fact about the owner.
 * **`/clear`** : System-wide memory wipe.
+
 ---
 
 ### Troubleshooting
